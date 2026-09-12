@@ -206,10 +206,14 @@ account's verified email matches `ALLOWED_EMAILS`/`ALLOWED_EMAIL_DOMAINS`.
 2. In the service's **Settings → Networking**, generate a public domain — that's
    your `MCP_BASE_URL`.
 3. Add the redirect URI `<that domain>/auth/callback` to the Google OAuth client
-   (step 1 above), then set all the variables from the table above plus
-   `HUBSTAFF_PERSONAL_ACCESS_TOKEN`, `MCP_TRANSPORT=http`, and `MCP_PORT` (Railway
-   sets `PORT` for you; point `MCP_PORT` at the same value, e.g. via a Railway
-   variable reference `${{PORT}}`).
+   (step 1 above), then set all the variables from the table above plus:
+   - `HUBSTAFF_PERSONAL_ACCESS_TOKEN`, `MCP_TRANSPORT=http`
+   - `MCP_PORT` — Railway sets `PORT` for you; point `MCP_PORT` at the same value
+     via a Railway variable reference, `${{PORT}}`
+   - `MCP_HOST=0.0.0.0` — **required**. The default (`127.0.0.1`) binds to
+     loopback only; Railway's proxy connects to the container from outside that,
+     so without this override the deploy looks healthy but the public domain
+     502s with nothing useful in the logs.
 4. Deploy. Point your MCP client at `https://<your-domain>/mcp`.
 
 ## Development
