@@ -134,6 +134,10 @@ git clone https://github.com/farce1/hubstify-mcp.git && cd hubstify-mcp && uv sy
 | `MCP_HOST` | - | `127.0.0.1` | Bind address when `MCP_TRANSPORT=http` |
 | `MCP_PORT` | - | `8000` | Port when `MCP_TRANSPORT=http` |
 
+`MCP_TRANSPORT=http` also requires Google sign-in (`GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `MCP_BASE_URL`, and `ALLOWED_EMAILS` and/or
+`ALLOWED_EMAIL_DOMAINS`) — see [Self-hosting over HTTP](#self-hosting-over-http).
+
 > Hubstaff rotates the refresh token on every exchange; this server persists the
 > newest token (mode `0600`) so it survives restarts. If you revoke the token,
 > update `HUBSTAFF_PERSONAL_ACCESS_TOKEN` and delete the token store file.
@@ -151,22 +155,62 @@ git clone https://github.com/farce1/hubstify-mcp.git && cd hubstify-mcp && uv sy
 ## Self-hosting over HTTP
 
 By default the server talks **stdio** (the client spawns it as a subprocess). To run
-it as a long-lived HTTP service instead, set `MCP_TRANSPORT=http`:
+it as a long-lived HTTP service instead (for example on Railway), set
+`MCP_TRANSPORT=http`. HTTP mode **requires Google sign-in** — see below.
+
+> ⚠️ **Single-user only.** The server acts as the *one* identity behind
+> `HUBSTAFF_PERSONAL_ACCESS_TOKEN`; every signed-in session reads and writes that
+> same account's Hubstaff data. Google sign-in controls *who can reach the
+> server*, not which Hubstaff account they act as — there's still only one.
+> Multi-tenant hosting (each user with their own Hubstaff token) is not
+> supported.
+
+### Google sign-in (required for HTTP transport)
+
+Google OAuth proves a caller owns *some* Google account; it does not prove
+they're authorized for this server's one Hubstaff token. So HTTP mode also
+requires an explicit allow-list, and refuses to start without both:
+
+**1. Create a Google OAuth client** at
+[console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+→ *Create Credentials* → *OAuth client ID* → *Web application*. Add
+`<your-public-url>/auth/callback` as an authorized redirect URI (e.g.
+`https://hubstaff-mcp-production.up.railway.app/auth/callback`). Note the
+client ID and secret.
+
+**2. Set these environment variables:**
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GOOGLE_CLIENT_ID` | ✅ | From the OAuth client above |
+| `GOOGLE_CLIENT_SECRET` | ✅ | From the OAuth client above |
+| `MCP_BASE_URL` | ✅ | Public HTTPS URL this server is reachable at (matches the redirect URI's origin) |
+| `ALLOWED_EMAILS` | at least one of these two | Comma-separated exact Google emails allowed to sign in |
+| `ALLOWED_EMAIL_DOMAINS` | | Comma-separated Google Workspace domains allowed to sign in |
 
 ```bash
 HUBSTAFF_PERSONAL_ACCESS_TOKEN=your_pat MCP_TRANSPORT=http MCP_PORT=8000 \
+  GOOGLE_CLIENT_ID=your_client_id GOOGLE_CLIENT_SECRET=your_client_secret \
+  MCP_BASE_URL=https://your-domain.example ALLOWED_EMAILS=you@example.com \
   uvx --from git+https://github.com/farce1/hubstify-mcp.git hubstaff-mcp
 ```
 
-The endpoint is then `http://<host>:<port>/mcp`, which any HTTP-capable MCP client
-can connect to.
+The endpoint is then `https://<your-domain>/mcp`. Your MCP client opens a normal
+OAuth browser flow against it and only lets the sign-in through if the Google
+account's verified email matches `ALLOWED_EMAILS`/`ALLOWED_EMAIL_DOMAINS`.
 
-> ⚠️ **Single-user only.** The server acts as the *one* identity behind
-> `HUBSTAFF_PERSONAL_ACCESS_TOKEN`; every request reads and writes that account's
-> Hubstaff data. Do **not** expose this endpoint to other people or the public
-> internet; keep it bound to localhost or your private network and put your own
-> authentication in front of it. Multi-tenant hosting (each user with their own
-> Hubstaff token) is not yet supported.
+### Deploying on Railway
+
+1. Push this repo (or your fork) to GitHub and create a Railway service from it,
+   or deploy straight from `git+https://github.com/farce1/hubstify-mcp.git`.
+2. In the service's **Settings → Networking**, generate a public domain — that's
+   your `MCP_BASE_URL`.
+3. Add the redirect URI `<that domain>/auth/callback` to the Google OAuth client
+   (step 1 above), then set all the variables from the table above plus
+   `HUBSTAFF_PERSONAL_ACCESS_TOKEN`, `MCP_TRANSPORT=http`, and `MCP_PORT` (Railway
+   sets `PORT` for you; point `MCP_PORT` at the same value, e.g. via a Railway
+   variable reference `${{PORT}}`).
+4. Deploy. Point your MCP client at `https://<your-domain>/mcp`.
 
 ## Development
 
